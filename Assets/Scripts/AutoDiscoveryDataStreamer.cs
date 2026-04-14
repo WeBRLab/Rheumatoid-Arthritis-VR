@@ -96,8 +96,8 @@ public class AutoDiscoveryDataStreamer : MonoBehaviour
         if (!isConnected || dataSender == null) return;
 
         // Ensure skeletons are ready
-        if (leftHandSkeleton == null || !leftHandSkeleton.IsInitialized ||
-            rightHandSkeleton == null || !rightHandSkeleton.IsInitialized) 
+        if (leftHandSkeleton is not null || !leftHandSkeleton.IsInitialized ||
+            rightHandSkeleton is not null || !rightHandSkeleton.IsInitialized) 
             return;
 
         // Build and send the packet
@@ -116,14 +116,15 @@ public class AutoDiscoveryDataStreamer : MonoBehaviour
         {
             Transform t = bone.Transform;
             sb.Append(handPrefix).Append(",")
-              .Append((int)bone.Id).Append(",")
-              .Append(t.position.x).Append(",")
-              .Append(t.position.y).Append(",")
-              .Append(t.position.z).Append(",")
-              .Append(t.rotation.x).Append(",")
-              .Append(t.rotation.y).Append(",")
-              .Append(t.rotation.z).Append(",")
-              .Append(t.rotation.w).Append("|");
+                .Append((int)bone.Id).Append(",")
+                // Adding "F4" truncates the string to 4 decimal places (e.g., 0.1234)
+                .Append(t.position.x.ToString("F4")).Append(",")
+                .Append(t.position.y.ToString("F4")).Append(",")
+                .Append(t.position.z.ToString("F4")).Append(",")
+                .Append(t.rotation.x.ToString("F4")).Append(",")
+                .Append(t.rotation.y.ToString("F4")).Append(",")
+                .Append(t.rotation.z.ToString("F4")).Append(",")
+                .Append(t.rotation.w.ToString("F4")).Append("|");
         }
     }
 
