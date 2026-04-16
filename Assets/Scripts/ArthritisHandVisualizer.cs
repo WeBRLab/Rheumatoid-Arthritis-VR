@@ -14,6 +14,13 @@ public class ArthritisHandVisualizer : MonoBehaviour
     [Header("Stiffness")]
     [Tooltip("Lower values mean stiffer fingers. Higher values mean closer to 1:1 movement.")]
     public float fingerRotationSpeed = 8f;
+<<<<<<< Updated upstream
+=======
+    
+    //[Header("Data Connection")]
+    //[Tooltip("The Data Streaming Manager that will control the finger rotation stiffness")]
+    //public AutoDiscoveryDataStreamer dataStreamer;
+>>>>>>> Stashed changes
 
     // We MUST store the damped state independently, because Meta overwrites the visual bones every frame
     private Quaternion[] dampedRotations;
@@ -51,6 +58,12 @@ public class ArthritisHandVisualizer : MonoBehaviour
 
     private void ApplyDampedRotations()
     {
+<<<<<<< Updated upstream
+=======
+        //Set the damping amount dynamically
+        //fingerRotationSpeed = dataStreamer.currentFingerSpeed;
+        
+>>>>>>> Stashed changes
         IList<OVRBone> targetBones = targetSkeleton.Bones;
         IList<OVRBone> visualBones = visualSkeleton.Bones;
 
