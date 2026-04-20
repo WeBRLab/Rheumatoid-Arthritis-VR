@@ -11,12 +11,12 @@ public class AutoDiscoveryDataStreamer : MonoBehaviour
     [Header("Network Ports")]
     public int dataPort = 5005;
     public int beaconPort = 5006;
-    public int commandPort = 5007; // NEW: Port to receive commands from Python
+    public int commandPort = 5007; 
     private const string MAGIC_WORD = "VR_LOGGER_HERE";
 
     [Header("Simulation State")]
     [Tooltip("Read this value from your Arthritis script to apply the remote speed")]
-    public float currentFingerSpeed = 8.0f; // Python will remotely change this!
+    public float currentFingerSpeed = 8.0f; 
 
     [Header("Visual Hands (Arthritic)")]
     public OVRSkeleton visualLeft;
@@ -26,11 +26,19 @@ public class AutoDiscoveryDataStreamer : MonoBehaviour
     public OVRSkeleton realLeft;
     public OVRSkeleton realRight;
 
+    [Header("Hand Visuals (Meshes & Materials)")]
+    [Tooltip("Drag the child object holding the SkinnedMeshRenderer for the LEFT hand here")]
+    public SkinnedMeshRenderer leftHandRenderer;
+    [Tooltip("Drag the child object holding the SkinnedMeshRenderer for the RIGHT hand here")]
+    public SkinnedMeshRenderer rightHandRenderer;
+    [Tooltip("Drop your 7 materials here (0-6)")]
+    public Material[] availableHandMaterials;
+
     [Header("Marbles")]
     public List<Transform> marbles = new List<Transform>();
     
     private UdpClient beaconListener;
-    private UdpClient commandListener; // NEW: Listens for parameter changes
+    private UdpClient commandListener; 
     private UdpClient dataSender;
     private IPEndPoint targetEndPoint;
     private StringBuilder sb;
@@ -39,13 +47,16 @@ public class AutoDiscoveryDataStreamer : MonoBehaviour
     private bool isConnected = false;
     private string discoveredIP = "";
 
-    private bool triggerReset = false; //used to trigger a marble reset
+    // --- THREAD SAFETY SWITCHES ---
+    private bool triggerReset = false; 
+    private bool triggerHandChange = false;
+    private int targetHandIndex = 0;
 
     void Start()
     {
         sb = new StringBuilder(2048);
         StartListeningForBeacon();
-        StartCommandListener(); // Start listening for Python commands immediately
+        StartCommandListener(); 
     }
 
     // --- BEACON DISCOVERY ---
@@ -80,7 +91,7 @@ public class AutoDiscoveryDataStreamer : MonoBehaviour
         }
     }
 
-    // --- COMMAND LISTENER (NEW) ---
+    // --- COMMAND LISTENER ---
     private void StartCommandListener()
     {
         try
@@ -108,24 +119,41 @@ public class AutoDiscoveryDataStreamer : MonoBehaviour
                 Debug.Log($"[Commands] Remote finger speed updated to: {currentFingerSpeed}");
             }
         }
-        else if (message == "CMD:RESET") // THE NEW RESET PARSER
+        else if (message == "CMD:RESET") 
         {
             Debug.Log("[Commands] Received Reset Command from Python!");
-            triggerReset = true;
+            triggerReset = true; // Flip the switch for LateUpdate
+        }
+        else if (message.StartsWith("CMD:HAND:")) 
+        {
+            string valueStr = message.Substring(9); // Strip out "CMD:HAND:"
+            if (int.TryParse(valueStr, out int handIndex))
+            {
+                Debug.Log($"[Commands] Received Hand Type Change Command: {handIndex}");
+                targetHandIndex = handIndex; // Store the requested number
+                triggerHandChange = true;    // Flip the switch for LateUpdate
+            }
         }
 
         // Keep listening for the next command
         commandListener.BeginReceive(OnCommandReceived, null);
     }
 
-    // --- DATA SENDING ---
+    // --- DATA SENDING & MAIN THREAD EXECUTION ---
     void LateUpdate()
     {
-        // --- CHECK FOR MARBLE RESET ---
+        // 1. Safely execute resets on the main physics thread
         if (triggerReset)
         {
             ResetMarbles();
-            triggerReset = false; // Turn the switch off
+            triggerReset = false; 
+        }
+
+        // 2. Safely execute material swaps on the main rendering thread
+        if (triggerHandChange)
+        {
+            ChangeHandMaterials(targetHandIndex);
+            triggerHandChange = false;
         }
         
         if (isConnected && dataSender == null)
@@ -147,7 +175,6 @@ public class AutoDiscoveryDataStreamer : MonoBehaviour
 
         // --- PACKET 1: VISUAL HANDS ---
         sb.Clear();
-        // NEW: We inject the currentFingerSpeed into the header!
         sb.Append(currentFrameTime).Append(",").Append(currentFingerSpeed.ToString("F3")).Append("|");
         AppendSkeletonData(visualLeft, "Visual", "L");
         AppendSkeletonData(visualRight, "Visual", "R");
@@ -156,7 +183,6 @@ public class AutoDiscoveryDataStreamer : MonoBehaviour
 
         // --- PACKET 2: REAL HANDS ---
         sb.Clear();
-        // Ensure both packets share the exact same timestamp and speed state
         sb.Append(currentFrameTime).Append(",").Append(currentFingerSpeed.ToString("F3")).Append("|");
         AppendSkeletonData(realLeft, "Real", "L");
         AppendSkeletonData(realRight, "Real", "R");
@@ -182,13 +208,35 @@ public class AutoDiscoveryDataStreamer : MonoBehaviour
         }
     }
     
-    // --- RESET MARBLES ---
+    // --- EXECUTOR METHODS ---
     public void ResetMarbles()
     {
         foreach (Transform marble in marbles)
         {
-            marble.GetComponent<MarbleReset>().ResetPosition();
+            if (marble != null)
+            {
+                var marbleReset = marble.GetComponent<MarbleReset>();
+                if (marbleReset != null) marbleReset.ResetPosition();
+            }
         }
+    }
+
+    public void ChangeHandMaterials(int index)
+    {
+        if (availableHandMaterials == null || availableHandMaterials.Length == 0) return;
+
+        if (index < 0 || index >= availableHandMaterials.Length)
+        {
+            Debug.LogWarning($"[Commands] Invalid hand index: {index}. You only have {availableHandMaterials.Length} materials assigned!");
+            return;
+        }
+        
+        rightHandRenderer.materials[0] = availableHandMaterials[index];
+        rightHandRenderer.material = availableHandMaterials[index];
+        leftHandRenderer.materials[0] = availableHandMaterials[index];
+        leftHandRenderer.material = availableHandMaterials[index];
+        
+        Debug.Log($"[Commands] Successfully applied hand material index {index}");
     }
 
     void OnDestroy()
